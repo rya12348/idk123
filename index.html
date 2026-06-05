@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Developer Project Gateway</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen">
+
+  <nav class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="font-bold text-slate-100 tracking-tight">ProjectGateway</span>
+      </div>
+      <div class="text-sm text-slate-400 font-mono">
+        <span>Uptime: <strong id="uptime-display" class="text-slate-200">Loading...</strong></span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    <header class="mb-8">
+      <h1 class="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-transparent">Engineering Project Registry</h1>
+      <p class="text-slate-400 mt-2">Dynamic reverse proxy gateway dashboard.</p>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div class="lg:col-span-2 space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+          <div class="p-6 border-b border-slate-800">
+            <h2 class="text-lg font-bold text-slate-100">Registered Routes</h2>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-950/40 text-slate-400 text-xs font-semibold border-b border-slate-800">
+                  <th class="px-6 py-4">Project</th>
+                  <th class="px-6 py-4 text-center">Year</th>
+                  <th class="px-6 py-4">Gateway Route</th>
+                  <th class="px-6 py-4">Target Host</th>
+                  <th class="px-6 py-4 text-right">State</th>
+                </tr>
+              </thead>
+              <tbody id="projects-table-body" class="divide-y divide-slate-800">
+                <tr>
+                  <td colspan="5" class="px-6 py-12 text-center text-slate-500 italic">Connecting to API...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+          <h2 class="text-lg font-bold text-slate-100 mb-4">Active Log Stream</h2>
+          <div id="logs-container" class="bg-slate-950 border border-slate-800 rounded-xl p-4 max-h-[300px] overflow-y-auto space-y-2 font-mono text-xs">
+            <div class="text-slate-500 italic text-center py-4">Waiting for traffic...</div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+          <h2 class="text-lg font-bold text-slate-100 mb-4">Diagnostics</h2>
+          <div class="space-y-3 font-mono text-xs text-slate-400">
+            <div class="flex justify-between border-b border-slate-800 pb-2">
+              <span>Node:</span> <span id="diag-node" class="text-slate-200">-</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-800 pb-2">
+              <span>OS:</span> <span id="diag-os" class="text-slate-200">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span>RAM Usage:</span> <span id="diag-memory" class="text-slate-200">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    async function fetchDashboardData() {
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        
+        document.getElementById('uptime-display').textContent = data.uptime;
+        document.getElementById('diag-node').textContent = data.diagnostics.nodeVersion;
+        document.getElementById('diag-os').textContent = data.diagnostics.platform;
+        document.getElementById('diag-memory').textContent = data.diagnostics.memory;
+
+        document.getElementById('projects-table-body').innerHTML = data.projects.map(proj => {
+          const health = data.health[proj.path] || { status: 'offline' };
+          const isOnline = health.status === 'online';
+          const badge = isOnline 
+            ? `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-xs border border-emerald-500/20">Online</span>`
+            : `<span class="px-2 py-0.5 rounded bg-slate-500/10 text-slate-400 text-xs border border-slate-500/20">Offline</span>`;
+
+          return `
+            <tr class="hover:bg-slate-800/20">
+              <td class="px-6 py-4 font-bold text-sm">${proj.name}</td>
+              <td class="px-6 py-4 text-center font-mono text-indigo-400">${proj.year}</td>
+              <td class="px-6 py-4 font-mono text-sm"><a href="${proj.path}" target="_blank" class="text-indigo-400 hover:underline">${proj.path}</a></td>
+              <td class="px-6 py-4 font-mono text-xs text-slate-400">${proj.target}</td>
+              <td class="px-6 py-4 text-right">${badge}</td>
+            </tr>
+          `;
+        }).join('');
+
+        if (data.logs.length === 0) {
+          document.getElementById('logs-container').innerHTML = `<div class="text-slate-500 italic text-center py-4">No logs yet.</div>`;
+        } else {
+          document.getElementById('logs-container').innerHTML = data.logs.map(log => `
+            <div class="py-1 border-b border-slate-900 last:border-0 text-[11px] ${log.isError ? 'text-rose-400' : 'text-slate-300'}">
+              <span class="text-indigo-400 font-bold">[${log.method}]</span> ${log.url} - <span class="text-slate-400">${log.action}</span>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        console.error('API Error:', err);
+      }
+    }
+    fetchDashboardData();
+    setInterval(fetchDashboardData, 3000);
+  </script>
+</body>
+</html>
